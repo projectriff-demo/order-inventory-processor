@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.function.Function;
 
 import io.projectriff.inventory.Article;
+import io.projectriff.inventory.ArticleQuantityUpdate;
 import io.projectriff.orders.OrderEvent;
 import io.projectriff.orders.ProcessedOrderEvent;
 import org.slf4j.Logger;
@@ -17,6 +18,7 @@ import reactor.util.function.Tuple2;
 import reactor.util.function.Tuples;
 
 import org.springframework.boot.web.client.RestTemplateBuilder;
+import org.springframework.http.HttpEntity;
 import org.springframework.web.client.RestTemplate;
 
 public class InventoryUpdateFunction implements Function<Flux<OrderEvent>, Tuple2<Flux<ProcessedOrderEvent>, Flux<ProcessedOrderEvent>>> {
@@ -69,13 +71,13 @@ public class InventoryUpdateFunction implements Function<Flux<OrderEvent>, Tuple
 					int newQuantity = quantityInInventory - entry.getValue();
 					logger.info("update inventory for " + entry.getKey() + " from=" + quantityInInventory + " to=" + newQuantity);
 					//ToDo: add retry since inventory might have changed during this order processing
-					Integer count = updateQuantityInStock(entry, quantityInInventory, newQuantity);
-					if (count == null || count.equals(0)) {
-						logger.info("failed update - backordering " + entry.getKey() + " for " + o.getUser());
-						backorder.getProducts().put(entry.getKey(), entry.getValue());
-					} else {
+					Article updated = updateQuantityInStock(entry, quantityInInventory, newQuantity);
+					if (updated != null && updated.getQuantity() == newQuantity) {
 						logger.info("fulfilling item " + entry.getKey() + " with a quantity of " + entry.getValue() + " for " + o.getUser());
 						fulfillment.getProducts().put(entry.getKey(), entry.getValue());
+					} else {
+						logger.info("failed update - backordering " + entry.getKey() + " for " + o.getUser());
+						backorder.getProducts().put(entry.getKey(), entry.getValue());
 					}
 				}
 			}
@@ -90,12 +92,14 @@ public class InventoryUpdateFunction implements Function<Flux<OrderEvent>, Tuple
 		return Flux.fromIterable(processed);
 	}
 
-	private Integer updateQuantityInStock(Map.Entry<String, Integer> entry, int quantityInInventory, int newQuantity) {
-		logger.debug("GET " + INVENTORY_API + "/api/article/search/updateBySku?sku=" + entry.getKey() +
-				"&from=" + quantityInInventory + "&to=" + newQuantity);
-		return restTemplate.getForObject(
-				INVENTORY_API + "/api/article/search/updateBySku?sku=" + entry.getKey() +
-						"&from=" + quantityInInventory + "&to=" + newQuantity, Integer.class);
+	private Article updateQuantityInStock(Map.Entry<String, Integer> entry, int quantityInInventory, int newQuantity) {
+		logger.debug("PATCH " + INVENTORY_API + "/api/article/updateQuantityBySku?sku=" + entry.getKey());
+		HttpEntity<ArticleQuantityUpdate> requestUpdate =
+				new HttpEntity<>(new ArticleQuantityUpdate(quantityInInventory, newQuantity));
+		ArticleQuantityUpdate update = new ArticleQuantityUpdate(quantityInInventory, newQuantity);
+		return restTemplate.patchForObject(
+				INVENTORY_API + "/api/article/updateQuantityBySku?sku=" + entry.getKey(),
+				requestUpdate, Article.class);
 	}
 
 	private Article getArticle(Map.Entry<String, Integer> entry) {

@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.HashMap;
 
 import io.projectriff.inventory.Article;
+import io.projectriff.inventory.ArticleQuantityUpdate;
 import io.projectriff.orders.OrderEvent;
 import io.projectriff.orders.ProcessedOrderEvent;
 import org.junit.jupiter.api.Test;
@@ -16,6 +17,7 @@ import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
 import reactor.util.function.Tuple2;
 
+import org.springframework.http.HttpEntity;
 import org.springframework.web.client.RestTemplate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -30,12 +32,16 @@ public class OrderInventoryTests {
 	public void test() throws InterruptedException {
 		Article widget = new Article("widget", "Widget", "Test1", BigDecimal.TEN, null, 5, null);
 		Article gadget = new Article("gadget", "Gadget", "Test2", BigDecimal.ONE, null, 1, null);
+		Article updatedWidget = new Article("gadget", "Gadget", "Test2", BigDecimal.ONE, null, 2, null);
+		HttpEntity<ArticleQuantityUpdate> requestUpdate =  new HttpEntity<>(new ArticleQuantityUpdate(5, 2));
 		Mockito.when(restTemplate.getForObject(
 				"http://inventory-api.default.svc.cluster.local/api/article/search/findBySku?sku=widget", Article.class))
 				.thenReturn(widget);
-		Mockito.when(restTemplate.getForObject(
-				"http://inventory-api.default.svc.cluster.local/api/article/search/updateBySku?sku=widget&from=5&to=2", Integer.class))
-				.thenReturn(Integer.valueOf(2));
+		Mockito.when(restTemplate.patchForObject(
+				"http://inventory-api.default.svc.cluster.local/api/article/updateQuantityBySku?sku=widget",
+				requestUpdate,
+				Article.class))
+				.thenReturn(updatedWidget);
 		Mockito.when(restTemplate.getForObject(
 				"http://inventory-api.default.svc.cluster.local/api/article/search/findBySku?sku=gadget", Article.class))
 				.thenReturn(gadget);
