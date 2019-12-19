@@ -5,7 +5,8 @@ Build the Function:
 ```
 riff function create order-inventory \
   --git-repo https://github.com/projectriff-demo/order-inventory-processor \
-  --handler io.projectriff.orderprocessor.InventoryUpdateFunction
+  --git-revision initial-implementation \
+  --handler io.projectriff.orderprocessor.InventoryUpdateFunction \
   --tail
 ```
 
